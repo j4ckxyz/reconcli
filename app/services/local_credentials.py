@@ -10,6 +10,17 @@ GH_CLI_SOURCE = gh_cli.SOURCE
 ENV_VARS = ("GH_TOKEN", "GITHUB_TOKEN")
 TIMEOUT_SECONDS = 10
 
+# When no helper has a login, git falls back to asking the user. Terminal
+# prompts are easy to switch off, but GIT_TERMINAL_PROMPT does not stop git
+# running an askpass program (SSH_ASKPASS is common on Linux desktops), which
+# would pop up a password dialog. Pointing GIT_ASKPASS at git itself makes that
+# step fail instantly on every platform, since git is necessarily on the PATH.
+NO_PROMPT_ENV = {
+    "GIT_TERMINAL_PROMPT": "0",
+    "GIT_ASKPASS": "git",
+    "GCM_INTERACTIVE": "never",
+}
+
 
 @dataclass(frozen=True)
 class Credential:
@@ -41,9 +52,8 @@ def from_env() -> list[Credential]:
 
 def from_git_credential_helper() -> Credential | None:
     """
-    Ask git's configured credential helper (Keychain, Git Credential Manager...)
-    for a github.com password. Prompting in the terminal is disabled so this can
-    never hang waiting for input.
+    Ask git's configured credential helper (Keychain, Git Credential Manager,
+    libsecret...) for a github.com password without ever prompting the user.
     """
     try:
         result = subprocess.run(
@@ -53,7 +63,7 @@ def from_git_credential_helper() -> Credential | None:
             text=True,
             timeout=TIMEOUT_SECONDS,
             check=False,
-            env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"},
+            env={**os.environ, **NO_PROMPT_ENV},
         )
     except (OSError, subprocess.SubprocessError):
         return None

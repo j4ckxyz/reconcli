@@ -1,4 +1,5 @@
 import subprocess
+import sys
 from unittest.mock import Mock
 
 from app.services import local_credentials
@@ -54,7 +55,9 @@ def test_git_credential_helper_reads_password_without_prompting(monkeypatch):
 
     assert credential is not None
     assert credential.token == fake_token
-    assert run.call_args.kwargs["env"]["GIT_TERMINAL_PROMPT"] == "0"
+    env = run.call_args.kwargs["env"]
+    assert env["GIT_TERMINAL_PROMPT"] == "0"
+    assert env["GIT_ASKPASS"] == "git"
     assert "host=github.com" in run.call_args.kwargs["input"]
 
 
@@ -84,3 +87,20 @@ def test_discover_orders_sources_and_drops_duplicate_tokens(monkeypatch):
     monkeypatch.setattr(local_credentials, "from_git_credential_helper", lambda: git)
 
     assert REAL_DISCOVER() == [gh, git]
+
+
+def test_git_credential_helper_never_opens_an_askpass_dialog(tmp_path, monkeypatch):
+    """Run real git with no helper and a desktop askpass configured."""
+    log = tmp_path / "askpass.log"
+    askpass = tmp_path / "askpass.py"
+    askpass.write_text(
+        f"import sys\nopen({str(log)!r}, 'a').write(sys.argv[-1])\nprint('typed')\n"
+    )
+    monkeypatch.setenv("SSH_ASKPASS", f"{sys.executable} {askpass}")
+    monkeypatch.setenv("DISPLAY", ":0")
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "empty-gitconfig"))
+    monkeypatch.delenv("GIT_ASKPASS", raising=False)
+
+    assert local_credentials.from_git_credential_helper() is None
+    assert not log.exists()
