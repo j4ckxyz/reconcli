@@ -73,7 +73,13 @@ def login(client_id: str | None = None, token: str | None = None):
 
 
 def is_interactive() -> bool:
-    return sys.stdin.isatty()
+    """
+    Only prompt when a person can see the question and answer it.
+
+    Checking stdout as well as stdin matters on Windows, where the NUL device
+    (`< NUL`, or `< /dev/null` in Git Bash) reports itself as a terminal.
+    """
+    return sys.stdin.isatty() and sys.stdout.isatty()
 
 
 def use_local_login() -> bool:

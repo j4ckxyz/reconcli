@@ -4,6 +4,9 @@ import pytest
 
 from app.services import auth, local_credentials, storage
 
+# Captured before conftest's autouse fixture stubs it out.
+REAL_IS_INTERACTIVE = auth.is_interactive
+
 
 def test_login_requires_credentials(monkeypatch):
     monkeypatch.delenv("GITHUB_CLIENT_ID", raising=False)
@@ -261,3 +264,16 @@ def test_logout_revokes_gh_permission_but_leaves_gh_alone(monkeypatch, capsys):
 def test_logout_when_not_logged_in(capsys):
     auth.logout()
     assert "not logged in" in capsys.readouterr().out
+
+
+def test_is_interactive_needs_a_terminal_on_both_ends(monkeypatch):
+    for stdin_tty, stdout_tty, expected in (
+        (True, True, True),
+        # Windows reports the NUL device as a terminal, so stdin alone is not
+        # enough to know someone is there to answer.
+        (True, False, False),
+        (False, True, False),
+    ):
+        monkeypatch.setattr(auth.sys.stdin, "isatty", lambda v=stdin_tty: v)
+        monkeypatch.setattr(auth.sys.stdout, "isatty", lambda v=stdout_tty: v)
+        assert REAL_IS_INTERACTIVE() is expected
